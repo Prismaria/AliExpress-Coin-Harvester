@@ -17,19 +17,22 @@ The extension never places orders or purchases. Some AliExpress tasks still requ
 - Google Chrome 120 or later.
 - An AliExpress account signed in in Chrome.
 
+## Install a Release
+
+1. Download [`ali-coin-harvester-v0.94.zip`](https://github.com/Prismaria/AliExpress-Coin-Harvester/releases/download/v0.94/ali-coin-harvester-v0.94.zip) from the Releases page.
+2. Unzip it to a permanent folder. Do not load the ZIP file itself.
+3. Open `chrome://extensions` and enable **Developer mode**.
+4. Choose **Load unpacked** and select the unzipped extension folder.
+5. Sign in to AliExpress, open the extension popup, and run the daily automation or set a schedule in **Options**.
+
+Chrome Web Store publication is separate. The release ZIP is the clean, root-level MV3 package prepared for store submission.
+
 ## Install From Source
 
 1. Clone this repository.
 2. Run `npm install`.
 3. Run `npm run check`.
-4. Open `chrome://extensions` and enable **Developer mode**.
-5. Choose **Load unpacked** and select the generated `dist` folder.
-
-## Use It
-
-1. Sign in to AliExpress.
-2. Open the extension popup and run the daily automation, or open **Options** to set a schedule.
-3. Review the run status and execution log when the automation finishes.
+4. Open `chrome://extensions`, enable **Developer mode**, and load the generated `dist` folder.
 
 ## Development
 

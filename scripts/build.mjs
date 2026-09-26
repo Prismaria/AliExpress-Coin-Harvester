@@ -17,7 +17,7 @@ const common = {
   minify: false,
   platform: "browser",
   target: "chrome120",
-  sourcemap: true,
+  sourcemap: process.env.BUILD_SOURCEMAP !== "false",
   logLevel: "info"
 };
 

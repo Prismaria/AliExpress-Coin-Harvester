@@ -7,3 +7,5 @@ Last-run-details.txt
 !.env.example
 .DS_Store
 Thumbs.db
+release/
+*.zip
