@@ -1,0 +1,86 @@
+{
+  "manifest_version": 3,
+  "name": "Ali Coin Harvester",
+  "description": "Safe, evidence-gated automation for the AliExpress coin workflow.",
+  "version": "0.94",
+  "minimum_chrome_version": "120",
+  "icons": {
+    "16": "icons/icon-light-16.png",
+    "48": "icons/icon-light-48.png",
+    "128": "icons/icon-light-128.png"
+  },
+  "permissions": [
+    "alarms",
+    "declarativeNetRequestWithHostAccess",
+    "storage",
+    "tabs",
+    "scripting",
+    "webNavigation",
+    "debugger",
+    "system.display",
+    "notifications"
+  ],
+  "host_permissions": [
+    "https://m.aliexpress.com/*",
+    "https://www.aliexpress.com/*",
+    "http://best.aliexpress.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Ali Coin Harvester",
+    "default_icon": {
+      "16": "icons/icon-light-16.png",
+      "48": "icons/icon-light-48.png",
+      "128": "icons/icon-light-128.png"
+    },
+    "default_popup": "popup/index.html"
+  },
+  "commands": {
+    "open-mobile-probe": {
+      "suggested_key": {
+        "default": "Alt+Shift+A",
+        "windows": "Alt+Shift+A",
+        "mac": "Alt+Shift+A",
+        "linux": "Alt+Shift+A"
+      },
+      "description": "Open the mobile AliExpress coin probe"
+    }
+  },
+  "options_ui": {
+    "page": "options/index.html",
+    "open_in_tab": true
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://m.aliexpress.com/*",
+        "https://www.aliexpress.com/*",
+        "http://best.aliexpress.com/*"
+      ],
+      "js": ["content/mtop-bridge-main.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://m.aliexpress.com/*",
+        "https://www.aliexpress.com/*",
+        "http://best.aliexpress.com/*"
+      ],
+      "js": ["content/phase0-probe.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://m.aliexpress.com/p/coin-index/*"
+      ],
+      "css": ["content/coin-index-scrollbar.css"],
+      "run_at": "document_start"
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
+}

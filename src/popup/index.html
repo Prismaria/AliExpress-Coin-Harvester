@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ali Coin Harvester</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header id="topbar" class="topbar" hidden>
+        <div class="header-leading">
+          <button id="settings-button" class="settings-button" type="button" aria-label="Open settings" title="Open settings">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M19.43 12.98c.04-.32.07-.65.07-.98s-.02-.66-.07-.98l2.11-1.65a.5.5 0 0 0 .12-.64l-2-3.46a.5.5 0 0 0-.61-.22l-2.49 1a7.4 7.4 0 0 0-1.69-.98L14.5 2.42A.49.49 0 0 0 14.01 2h-4a.49.49 0 0 0-.49.42L9.14 5.07c-.61.25-1.17.58-1.69.98l-2.49-1a.49.49 0 0 0-.61.22l-2 3.46a.5.5 0 0 0 .12.64l2.11 1.65c-.04.32-.08.65-.08.98s.03.66.08.98l-2.11 1.65a.5.5 0 0 0-.12.64l2 3.46c.12.21.37.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.04.24.25.42.49.42h4c.24 0 .45-.18.49-.42l.38-2.65c.61-.25 1.17-.58 1.69-.98l2.49 1c.23.08.49-.01.61-.22l2-3.46a.5.5 0 0 0-.12-.64l-2.11-1.65ZM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5Z" />
+            </svg>
+          </button>
+          <div class="brand-lockup">
+            <a class="brand-link" href="index.html" target="_blank" rel="noopener" aria-label="Open Ali Coin Harvester in a new tab">
+              <h1>Ali Coin Harvester</h1>
+            </a>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button id="theme-toggle" class="theme-toggle" type="button" role="switch" aria-checked="false" aria-label="Switch to dark mode" title="Switch to dark mode">
+            <span id="theme-icon" class="theme-icon" aria-hidden="true">
+              <svg class="theme-sun" viewBox="0 0 24 24" focusable="false"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42" /></svg>
+              <svg class="theme-moon" viewBox="0 0 24 24" focusable="false"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5 8.5 8.5 0 1 0 20.5 14.5Z" /></svg>
+            </span>
+            <span id="theme-label">Dark</span>
+          </button>
+          <div id="header-balance-pill" class="coins-pill" aria-label="Current balance: unavailable">
+            <img src="https://ae-pic-a1.aliexpress-media.com/kf/S3ecd25e5d1be477ea57eb4a729979007n.png" alt="" />
+            <strong id="header-balance">--</strong>
+          </div>
+        </div>
+      </header>
+
+      <section id="login-screen" class="login-screen panel" aria-labelledby="login-heading">
+        <div class="login-mark" aria-hidden="true">A</div>
+        <p class="eyebrow">WELCOME</p>
+        <h2 id="login-heading">Connect your AliExpress account</h2>
+        <p class="login-description">Log in to AliExpress before using the coin harvester.</p>
+        <div class="login-actions">
+          <button id="login-to-aliexpress" class="primary" type="button">Login to AliExpress</button>
+          <button id="already-logged-in" class="secondary" type="button">I've already logged in</button>
+        </div>
+      </section>
+
+      <aside id="auth-banner" class="auth-banner" role="alert" aria-labelledby="auth-banner-heading" hidden>
+        <div class="auth-banner-copy">
+          <p class="eyebrow">ACCOUNT NOTICE</p>
+          <h2 id="auth-banner-heading">You're signed out of AliExpress</h2>
+          <p>Sign in again to view your coin balance and run automation.</p>
+        </div>
+        <div class="auth-banner-actions">
+          <button id="auth-sign-in" class="primary" type="button">Sign in again</button>
+          <button id="auth-dismiss" class="auth-dismiss" type="button">Dismiss</button>
+        </div>
+      </aside>
+
+      <div id="dashboard" class="dashboard-grid" hidden>
+      <section class="panel stats-panel" aria-labelledby="stats-heading">
+        <div class="panel-heading">
+          <h2 id="stats-heading">Coin account</h2>
+          <span id="stats-state" class="state-label">Unavailable</span>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-card stat-card-primary"><span class="stat-label">Current balance</span><strong id="stats-balance">--</strong></div>
+          <div class="stat-card"><span class="stat-label">Current savings</span><strong id="stats-current-savings">--</strong></div>
+          <div class="stat-card"><span class="stat-label">Lifetime savings</span><strong id="stats-lifetime-savings">--</strong></div>
+        </div>
+        <p id="stats-meta" class="muted">Stats have not been collected.</p>
+      </section>
+
+      <section class="panel automation-panel" aria-labelledby="automation-heading">
+        <div class="panel-heading">
+          <h2 id="automation-heading">Automation</h2>
+          <span id="run-state" class="state-label">Idle</span>
+        </div>
+        <p id="automation-status" class="muted">No automation run has started.</p>
+         <div id="run-summary" class="run-summary" aria-live="off">
+           <div><span>Progress</span><strong id="run-progress">Idle</strong></div>
+           <div><span>Elapsed</span><strong id="run-elapsed">--</strong></div>
+           <div><span>Current task</span><strong id="run-current-task">--</strong></div>
+         </div>
+          <div class="automation-actions">
+            <button id="run-automation" class="primary" type="button">Run daily automation</button>
+            <button id="stop-automation" class="secondary" type="button" disabled>Stop run</button>
+          </div>
+       </section>
+
+      <section class="panel diagnostics-panel" aria-labelledby="diagnostics-heading">
+        <div class="panel-heading">
+          <h2 id="diagnostics-heading">Last-run details</h2>
+          <button id="export-diagnostics" class="icon-button" type="button">Copy JSON</button>
+        </div>
+        <p id="diagnostics-summary" class="muted">No run diagnostics are available.</p>
+        <div id="diagnostics-tasks" class="diagnostics-tasks" role="list"></div>
+        <p id="diagnostics-mismatches" class="diagnostics-mismatches muted"></p>
+      </section>
+
+      <section class="panel history-panel" aria-labelledby="history-heading">
+        <div class="panel-heading">
+          <h2 id="history-heading">Recent coin history</h2>
+          <label class="history-filter" for="history-filter">Filter
+            <select id="history-filter">
+              <option value="all">All</option>
+              <option value="earned">Earned</option>
+              <option value="used">Used</option>
+              <option value="expired">Expired</option>
+              <option value="unknown">Uncategorized</option>
+            </select>
+          </label>
+        </div>
+        <div id="history-list" class="history-list" role="list"></div>
+        <p id="history-empty" class="muted">No history is available yet.</p>
+      </section>
+
+       <details class="advanced-menu">
+         <summary>
+           <span><span class="eyebrow">DEVELOPER TOOLS</span><strong>Advanced tools</strong></span>
+           <small>Logs, probes, and runtime observations</small>
+         </summary>
+         <div class="advanced-grid">
+           <section class="panel advanced-tool-panel log-panel" aria-labelledby="logs-heading">
+             <details class="log-details">
+               <summary><span id="logs-heading">Execution log</span><small>Open to inspect</small></summary>
+                <div class="log-heading"><span>Recent events</span><span class="log-actions"><label class="history-filter" for="log-run-filter"><span>Run</span><select id="log-run-filter" aria-label="Run to copy"></select></label><button id="copy-logs" class="icon-button" type="button">Copy run</button><button id="copy-all-logs" class="icon-button" type="button">Copy all</button><button id="clear-logs" class="icon-button" type="button">Clear</button></span></div>
+               <div id="automation-logs" class="automation-logs" role="log" aria-live="polite"></div>
+             </details>
+           </section>
+
+           <section class="panel advanced-tool-panel probe-panel" aria-labelledby="probe-heading">
+             <div class="panel-heading">
+               <div>
+                 <p class="eyebrow">DISCOVERY</p>
+                 <h2 id="probe-heading">Probe controls</h2>
+               </div>
+               <span class="status-dot" aria-label="Automation guarded"></span>
+             </div>
+             <div class="probe-actions">
+               <button id="open-mobile" class="primary" type="button">Open mobile probe</button>
+               <button id="close-mobile" class="secondary" type="button">Close probe windows</button>
+             </div>
+             <form id="probe-form" class="probe-form">
+               <label for="probe-url">Probe another allowlisted URL</label>
+               <div class="probe-input-row">
+                 <input id="probe-url" type="url" value="https://m.aliexpress.com/p/coin-index/coinquest.html" spellcheck="false" />
+                 <button class="secondary" type="submit">Open URL probe</button>
+               </div>
+               <label class="check-label"><input id="probe-mobile" type="checkbox" checked /> Apply mobile User-Agent</label>
+             </form>
+           </section>
+
+           <section class="panel advanced-tool-panel runtime-panel" aria-labelledby="runtime-heading">
+             <div class="panel-heading">
+               <h2 id="runtime-heading">Runtime observations</h2>
+               <span class="log-actions">
+                 <button id="copy-observations" class="icon-button" type="button">Copy results</button>
+                 <button id="refresh" class="icon-button" type="button" aria-label="Refresh observations">Refresh</button>
+               </span>
+             </div>
+             <p id="status" class="muted" role="status">No probe window has reported yet.</p>
+             <dl id="observations" class="observations"></dl>
+           </section>
+         </div>
+       </details>
+      </div>
+
+       <p id="live-announcement" class="sr-only" aria-live="polite" aria-atomic="true"></p>
+    </main>
+    <script src="main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ali Coin Harvester Settings</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="header-inner">
+        <a class="back-link" href="../popup/index.html" aria-label="Back to dashboard">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="m14.7 5.3-1.4-1.4L5.2 12l8.1 8.1 1.4-1.4L9.1 13H20v-2H9.1l5.6-5.7Z" />
+          </svg>
+          <span>Dashboard</span>
+        </a>
+        <div class="header-actions">
+          <span class="header-caption">Preferences save automatically</span>
+          <button id="theme-toggle" class="theme-toggle" type="button" role="switch" aria-checked="false" aria-label="Switch to dark mode" title="Switch to dark mode">
+            <span id="theme-icon" class="theme-icon" aria-hidden="true">
+              <svg class="theme-sun" viewBox="0 0 24 24" focusable="false"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42" /></svg>
+              <svg class="theme-moon" viewBox="0 0 24 24" focusable="false"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5 8.5 8.5 0 1 0 20.5 14.5Z" /></svg>
+            </span>
+            <span id="theme-label">Dark</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="page">
+      <section class="page-intro">
+        <p class="eyebrow">CONTROL CENTER</p>
+        <h1>Settings</h1>
+        <p class="intro">Tune the daily coin workflow without opening another AliExpress tab. Changes are saved as you make them.</p>
+        <p id="saved" class="saved" role="status" aria-live="polite">Ready to save changes.</p>
+      </section>
+
+      <div class="settings-grid">
+        <section class="panel" aria-labelledby="automation-heading">
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">DAILY FLOW</p>
+              <h2 id="automation-heading">Automation</h2>
+            </div>
+            <button id="reset-settings" class="small-button" type="button">Reset all</button>
+          </div>
+          <p class="panel-intro">Choose when the guarded workflow runs and which behavior it should use.</p>
+          <label class="toggle-row">
+            <span><strong>Daily schedule</strong><small>Run eligible tasks automatically once per day.</small></span>
+            <input id="schedule-enabled" type="checkbox" />
+          </label>
+          <div class="field-grid">
+            <label class="field"><span>Run at</span><input id="schedule-time" type="time" value="09:00" /></label>
+            <label class="field"><span>Missed schedule</span>
+              <select id="schedule-catch-up">
+                <option value="same-day">Run once today</option>
+                <option value="within-grace">Run within grace window</option>
+                <option value="never">Skip it</option>
+              </select>
+            </label>
+          </div>
+          <details class="advanced">
+            <summary>Advanced behavior</summary>
+            <div class="advanced-content">
+              <label class="field"><span>Task execution</span>
+                <select id="execution-mode">
+                  <option value="parallel">Parallel</option>
+                  <option value="sequential">One at a time</option>
+                </select>
+              </label>
+              <label class="toggle-row compact-row"><span><strong>Compact window</strong><small>Use a smaller automation window.</small></span><input id="compact-window" type="checkbox" /></label>
+              <label class="toggle-row compact-row"><span><strong>Focus manual runs</strong><small>Bring manually started runs forward.</small></span><input id="focus-manual-runs" type="checkbox" /></label>
+              <label class="toggle-row compact-row"><span><strong>Focus scheduled runs</strong><small>Bring scheduled runs forward.</small></span><input id="focus-scheduled-runs" type="checkbox" /></label>
+              <label class="toggle-row compact-row"><span><strong>Stop on unknown state</strong><small>Pause instead of guessing when evidence is missing.</small></span><input id="stop-unknown-state" type="checkbox" /></label>
+            </div>
+          </details>
+        </section>
+
+        <section class="panel" aria-labelledby="stats-heading">
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">ACCOUNT</p>
+              <h2 id="stats-heading">Coin stats</h2>
+            </div>
+            <span class="panel-badge">Local cache</span>
+          </div>
+          <p class="panel-intro">Keep your balance, savings, and recent coin history up to date in the popup.</p>
+          <label class="toggle-row">
+            <span><strong>Collect account stats</strong><small>Refresh stats while the extension is active.</small></span>
+            <input id="stats-enabled" type="checkbox" />
+          </label>
+          <label class="field"><span>Refresh interval</span><span class="input-with-unit"><input id="stats-refresh-minutes" type="number" min="5" max="60" step="1" inputmode="numeric" /><em>minutes</em></span></label>
+        </section>
+
+        <section class="panel tasks-panel" aria-labelledby="tasks-heading">
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">WORKFLOW</p>
+              <h2 id="tasks-heading">Task selection</h2>
+            </div>
+            <span class="panel-badge">Guarded</span>
+          </div>
+          <p class="panel-intro">Turn individual tasks on or off. Tasks that require your help stay opt-in.</p>
+          <div class="task-selection-actions" aria-label="Task selection shortcuts">
+            <button id="select-all-tasks" class="small-button" type="button">Select all</button>
+            <button id="select-none-tasks" class="small-button" type="button">Select none</button>
+          </div>
+          <div id="task-settings" class="task-settings"></div>
+        </section>
+
+        <section class="panel" aria-labelledby="notifications-heading">
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">FEEDBACK</p>
+              <h2 id="notifications-heading">Notifications</h2>
+            </div>
+          </div>
+          <p class="panel-intro">Choose which run outcomes deserve a browser notification.</p>
+          <label class="toggle-row compact-row"><span><strong>Run notifications</strong><small>Allow the extension to notify you.</small></span><input id="notifications-enabled" type="checkbox" /></label>
+          <label class="toggle-row compact-row"><span><strong>Login required</strong><small>Tell me when AliExpress needs attention.</small></span><input id="notification-login" type="checkbox" /></label>
+          <label class="toggle-row compact-row"><span><strong>Completed runs</strong><small>Notify when all selected tasks finish.</small></span><input id="notification-complete" type="checkbox" /></label>
+          <label class="toggle-row compact-row"><span><strong>Partial runs</strong><small>Notify when only some tasks finish.</small></span><input id="notification-partial" type="checkbox" /></label>
+          <label class="toggle-row compact-row"><span><strong>Failed runs</strong><small>Notify when a run cannot continue.</small></span><input id="notification-failure" type="checkbox" /></label>
+        </section>
+
+        <section class="panel" aria-labelledby="data-heading">
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">STORAGE</p>
+              <h2 id="data-heading">Data and privacy</h2>
+            </div>
+          </div>
+          <p class="panel-intro">Data stays in extension storage. Credentials, cookies, and account secrets are never saved.</p>
+          <div class="field-grid">
+            <label class="field"><span>History retention</span><span class="input-with-unit"><input id="history-retention-months" type="number" min="1" max="6" step="1" inputmode="numeric" /><em>months</em></span></label>
+            <label class="field"><span>Diagnostics retention</span><span class="input-with-unit"><input id="diagnostics-retention-days" type="number" min="1" max="365" step="1" inputmode="numeric" /><em>days</em></span></label>
+          </div>
+          <div class="button-row">
+            <button id="clear-history" class="small-button" type="button">Clear history</button>
+            <button id="clear-diagnostics" class="small-button" type="button">Clear diagnostics</button>
+          </div>
+          <p id="data-status" class="saved" role="status" aria-live="polite"></p>
+        </section>
+
+        <details class="panel advanced-panel">
+          <summary>
+            <span><span class="section-kicker">OPTIONAL</span><strong>Timing safeguards</strong></span>
+            <small>Only change these if a live session needs tuning.</small>
+          </summary>
+          <div class="advanced-content timing-grid">
+            <label class="field"><span>Coin page load</span><span class="input-with-unit"><input id="page-load-timeout" data-timeout type="number" min="5000" max="120000" step="1000" inputmode="numeric" /><em>ms</em></span></label>
+            <label class="field"><span>Child tab commit</span><span class="input-with-unit"><input id="child-commit-timeout" data-timeout type="number" min="5000" max="120000" step="1000" inputmode="numeric" /><em>ms</em></span></label>
+            <label class="field"><span>Passive task dwell</span><span class="input-with-unit"><input id="passive-dwell-timeout" data-timeout type="number" min="15000" max="600000" step="1000" inputmode="numeric" /><em>ms</em></span></label>
+            <label class="field"><span>Assisted task dwell</span><span class="input-with-unit"><input id="assisted-dwell-timeout" data-timeout type="number" min="300000" max="3600000" step="1000" inputmode="numeric" /><em>ms</em></span></label>
+          </div>
+          <p class="hint">Values are clamped before they are stored or used.</p>
+        </details>
+      </div>
+    </main>
+    <script src="main.js"></script>
+  </body>
+</html>
