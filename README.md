@@ -1,8 +1,10 @@
 # Ali Coin Harvester
 
-Automate the repetitive parts of collecting AliExpress Coins.
+> #### Automate the repetitive parts of collecting AliExpress Coins.
 
-Ali Coin Harvester collects the daily streak reward, works through supported **Earn more coins** tasks, and records what it completed. Start the automation from the popup or set a daily schedule.
+Ali Coin Harvester collects the daily streak reward, works through supported **Earn more coins** tasks, and records what it completed.
+
+You can start the automation from the popup or set a daily schedule. If the browser or PC is unavailable at the scheduled time, the automation can resume when Chrome is available again.
 
 ## Automated Routine
 
@@ -17,30 +19,30 @@ Ali Coin Harvester collects the daily streak reward, works through supported **E
 
 Once the streak reaches day 5, the regular check-in is worth `50 coins` per day. The captured task lineup adds another `57-61 coins`:
 
-| Reward source | Coins each | Times per day | Daily total |
-|---|---:|---:|---:|
-| Streak check-in, day 5 onward | 50 | 1 | 50 |
-| Separate Daily check-in task | 1 | 1 | 1 |
-| Explore sponsored items | 5 | 2 | 10 |
-| Browse surprise items | 5 | 2 | 10 |
-| Browse recently viewed items | 5 | 1 | 5 |
-| View your Coins Savings Recap | 5 | 1 | 5 |
-| View Super discounts | 5 | 3 | 15 |
-| Search for what you love | 5 | 1 | 5 |
-| Coupons and shopping credits | 5 | 1 | 5 |
-| Daily quiz challenge | 1-5 | 1 | 1-5 |
-| **Automated task subtotal** | | | **57-61** |
-| **Potential daily total** | | | **107-111** |
+| Reward source                 | Coins each | Times per day | Daily total |
+| ----------------------------- | ----------:| -------------:| -----------:|
+| Streak check-in, day 5 onward | 50         | 1             | 50          |
+| Separate Daily check-in task  | 1          | 1             | 1           |
+| Explore sponsored items       | 5          | 2             | 10          |
+| Browse surprise items         | 5          | 2             | 10          |
+| Browse recently viewed items  | 5          | 1             | 5           |
+| View your Coins Savings Recap | 5          | 1             | 5           |
+| View Super discounts          | 5          | 3             | 15          |
+| Search for what you love      | 5          | 1             | 5           |
+| Coupons and shopping credits  | 5          | 1             | 5           |
+| Daily quiz challenge          | 1-5        | 1             | 1-5         |
+| **Automated task subtotal**   |            |               | **57-61**   |
+| **Potential daily total**     |            |               | **107-111** |
 
 If that same lineup remains available every day:
 
-| Time | Check-in only | Automated tasks | Combined total |
-|---|---:|---:|---:|
-| 1 day | 50 | 57-61 | 107-111 |
-| 1 week | 350 | 399-427 | 749-777 |
-| 1 month (30 days) | 1,500 | 1,710-1,830 | 3,210-3,330 |
-| 3 months (90 days) | 4,500 | 5,130-5,490 | 9,630-9,990 |
-| 1 year (365 days) | 18,250 | 20,805-22,265 | 39,055-40,515 |
+| Time               | Check-in only | Automated tasks | Combined total |
+| ------------------ | -------------:| ---------------:| --------------:|
+| 1 day              | 50            | 57-61           | 107-111        |
+| 1 week             | 350           | 399-427         | 749-777        |
+| 1 month (30 days)  | 1,500         | 1,710-1,830     | 3,210-3,330    |
+| 3 months (90 days) | 4,500         | 5,130-5,490     | 9,630-9,990    |
+| 1 year (365 days)  | 18,250        | 20,805-22,265   | 39,055-40,515  |
 
 These figures use the day-5-and-later check-in amount and the captured task rewards. They are examples, not guaranteed earnings; AliExpress can change task availability, reward amounts, streak rules, and account eligibility.
 
