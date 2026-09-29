@@ -90,9 +90,10 @@ h2 { font-size: 18px; line-height: 1.2; }
 .toggle-row small { margin-top: 2px; color: var(--ae-text-subtle); font-size: 11px; }
 .toggle-row input[type="checkbox"] { width: 18px; height: 18px; margin: 0; accent-color: var(--ae-orange); }
 .field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+.credential-fields { display: grid; gap: 12px; }
 .field { display: flex; flex-direction: column; gap: 6px; color: var(--ae-text-muted); font-size: 11px; font-weight: 700; }
-.field input[type="time"], .field input[type="number"], .field select { width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid var(--ae-border-strong); border-radius: 9px; background: var(--ae-surface-raised); color: var(--ae-text); }
-.field input[type="time"]:hover, .field input[type="number"]:hover, .field select:hover { border-color: var(--ae-orange); }
+.field input[type="time"], .field input[type="number"], .field input[type="text"], .field input[type="password"], .field select { width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid var(--ae-border-strong); border-radius: 9px; background: var(--ae-surface-raised); color: var(--ae-text); }
+.field input[type="time"]:hover, .field input[type="number"]:hover, .field input[type="text"]:hover, .field input[type="password"]:hover, .field select:hover { border-color: var(--ae-orange); }
 .input-with-unit { display: flex; align-items: center; gap: 7px; }
 .input-with-unit input { flex: 1 1 auto; min-width: 0; }
 .input-with-unit em { color: var(--ae-text-subtle); font-size: 11px; font-style: normal; font-weight: 500; }

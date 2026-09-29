@@ -1,5 +1,7 @@
 import type {
   CoinIndexObservation,
+  LoginPanelObservation,
+  LoginPanelStage,
   PhraseMatch,
   Progress,
   QuizObservation,
@@ -114,6 +116,7 @@ function actionIsCompleted(action: Element): boolean {
 
 export function observeCoinIndex(document: Document): CoinIndexObservation {
   const root = document.querySelector('#root [data-version="daily"]');
+  const loginButton = document.querySelector(".aecoin-loginButtonContainer-2rtjc button.aecoin-loginButton-3pcZm");
   const button = findCoinButton(document);
   const currentCard = document.querySelector("#sign-main-card");
   const buttonText = normalizeText(button?.textContent);
@@ -127,7 +130,8 @@ export function observeCoinIndex(document: Document): CoinIndexObservation {
   const collectButton = /checkinbutton-/iu.test(button?.className ?? "") || /collect/u.test(buttonText);
 
   let state: CoinIndexObservation["state"] = "loading";
-  if (!root) state = "unknown";
+  if (loginButton) state = "login-required";
+  else if (!root) state = "unknown";
   else if (button && !buttonDisabled && currentCard && checked && taskButton) state = "already-checked";
   else if (button && !buttonDisabled && taskButton) state = "task-opener";
   else if (button && !buttonDisabled && (unchecked || collectButton)) state = "collectable";
@@ -135,6 +139,7 @@ export function observeCoinIndex(document: Document): CoinIndexObservation {
 
   return {
     rootFound: Boolean(root),
+    loginButtonFound: Boolean(loginButton),
     buttonFound: Boolean(button),
     buttonVisible,
     buttonHasGeometry,
@@ -142,6 +147,104 @@ export function observeCoinIndex(document: Document): CoinIndexObservation {
     buttonDisabled,
     currentCardClasses,
     state
+  };
+}
+
+function findLoginDrawer(document: Document): Element | undefined {
+  const drawers = [
+    ...document.querySelectorAll(".cosmos-drawer-right .cosmos-drawer-body"),
+    ...document.querySelectorAll(".cosmos-drawer-right .cosmos-drawer-content"),
+    ...document.querySelectorAll(".cosmos-drawer-right")
+  ];
+  const drawer = drawers.find((candidate) => isVisible(candidate));
+  if (drawer) return drawer;
+
+  // The standalone login document can render its form without the drawer wrapper.
+  const passwordVisible = [...document.querySelectorAll('input[type="password"]')].some((input) => isVisible(input));
+  const signInActionVisible = [...document.querySelectorAll("button")].some((button) =>
+    isVisible(button) && normalizeText(button.getAttribute("aria-label") || button.textContent) === "sign in"
+  );
+  const accountVisible = [...document.querySelectorAll('input[autocomplete~="username"], input[name="account"], input[aria-label="Email or phone number"]')]
+    .some((input) => isVisible(input));
+  const continueActionVisible = [...document.querySelectorAll("button")].some((button) =>
+    isVisible(button) && normalizeText(button.getAttribute("aria-label") || button.textContent) === "continue"
+  );
+  return (passwordVisible && signInActionVisible) || (accountVisible && continueActionVisible)
+    ? document.body ?? undefined
+    : undefined;
+}
+
+export function findLoginAccountInput(document: Document): HTMLInputElement | undefined {
+  const drawer = findLoginDrawer(document);
+  if (!drawer) return undefined;
+  const inputs = [...drawer.querySelectorAll("input")].filter((input) => isVisible(input)) as HTMLInputElement[];
+  return inputs.find((input) => input.matches('input[autocomplete~="username"], input[name="account"], input[aria-label="Email or phone number"]'));
+}
+
+export function findLoginPasswordInput(document: Document): HTMLInputElement | undefined {
+  const drawer = findLoginDrawer(document);
+  if (!drawer) return undefined;
+  const inputs = [...drawer.querySelectorAll("input")].filter((input) => isVisible(input)) as HTMLInputElement[];
+  return inputs.find((input) => input.matches('#fm-history-login-password, input[name="fm-history-login-password"]')) ??
+    inputs.find((input) => input.matches('input[type="password"]'));
+}
+
+export function findLoginActionButton(document: Document, action: "continue" | "sign in"): HTMLButtonElement | undefined {
+  const drawer = findLoginDrawer(document);
+  if (!drawer) return undefined;
+  return [...drawer.querySelectorAll("button")]
+    .filter((button) => isVisible(button))
+    .find((button) => normalizeText(button.getAttribute("aria-label") || button.textContent) === action) as HTMLButtonElement | undefined;
+}
+
+function hasActiveLoginChallenge(drawer: Element): boolean {
+  if ([...drawer.querySelectorAll('input[autocomplete~="one-time-code"], input[aria-label*="verification code" i], input[aria-label*="security code" i], input[aria-label*="email code" i], input[aria-label*="SMS code" i]')].some((input) => isVisible(input))) {
+    return true;
+  }
+  const captcha = drawer.querySelector("#baxia-login-check-code");
+  if (captcha && isVisible(captcha) && (captcha.children.length > 0 || compactText(captcha.textContent))) return true;
+  const headings = [...drawer.querySelectorAll('h1, h2, [role="heading"]')]
+    .filter((heading) => isVisible(heading))
+    .map((heading) => normalizeText(heading.textContent));
+  return headings.some((heading) => /(?:verification|security check|verify it's you|enter.*code)/u.test(heading));
+}
+
+export function observeLoginPanel(document: Document): LoginPanelObservation {
+  const drawer = findLoginDrawer(document);
+  if (!drawer) {
+    return {
+      drawerFound: false,
+      stage: "closed",
+      accountInputFound: false,
+      passwordInputFound: false,
+      continueButtonFound: false,
+      continueButtonEnabled: false,
+      signInButtonFound: false,
+      signInButtonEnabled: false,
+      challengeDetected: false
+    };
+  }
+
+  const account = findLoginAccountInput(document);
+  const password = findLoginPasswordInput(document);
+  const continueButton = findLoginActionButton(document, "continue");
+  const signInButton = findLoginActionButton(document, "sign in");
+  const challengeDetected = hasActiveLoginChallenge(drawer);
+  let stage: LoginPanelStage = "unknown";
+  if (challengeDetected) stage = "challenge";
+  else if (password) stage = "password";
+  else if (account) stage = "email";
+
+  return {
+    drawerFound: true,
+    stage,
+    accountInputFound: Boolean(account),
+    passwordInputFound: Boolean(password),
+    continueButtonFound: Boolean(continueButton),
+    continueButtonEnabled: Boolean(continueButton && !isDisabled(continueButton)),
+    signInButtonFound: Boolean(signInButton),
+    signInButtonEnabled: Boolean(signInButton && !isDisabled(signInButton)),
+    challengeDetected
   };
 }
 

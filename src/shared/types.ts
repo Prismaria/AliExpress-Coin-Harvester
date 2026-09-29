@@ -207,6 +207,7 @@ export type AutomationSession = {
   mainTabId: number;
   mainWindowId?: number;
   mainWindowOwned?: boolean;
+  loginAttemptInProgress?: boolean;
   childTabs: Record<string, AutomationChildTab>;
   expectedNavigations: Record<string, ExpectedNavigation>;
 };
@@ -221,6 +222,7 @@ export type CoinIndexState =
   | "collectable"
   | "task-opener"
   | "already-checked"
+  | "login-required"
   | "loading"
   | "unknown";
 
@@ -242,6 +244,7 @@ export type TaskObservation = {
 
 export type CoinIndexObservation = {
   rootFound: boolean;
+  loginButtonFound: boolean;
   buttonFound: boolean;
   buttonVisible: boolean;
   buttonHasGeometry: boolean;
@@ -249,6 +252,25 @@ export type CoinIndexObservation = {
   buttonDisabled: boolean;
   currentCardClasses: string;
   state: CoinIndexState;
+};
+
+export type LoginPanelStage = "email" | "password" | "challenge" | "closed" | "unknown";
+
+export type LoginPanelObservation = {
+  drawerFound: boolean;
+  stage: LoginPanelStage;
+  accountInputFound: boolean;
+  passwordInputFound: boolean;
+  continueButtonFound: boolean;
+  continueButtonEnabled: boolean;
+  signInButtonFound: boolean;
+  signInButtonEnabled: boolean;
+  challengeDetected: boolean;
+};
+
+export type CredentialStatus = {
+  saved: boolean;
+  username?: string;
 };
 
 export type PageObservation = {
@@ -479,10 +501,12 @@ export type ProbeSession = {
   owner?: "manual" | "automation";
   runId?: string;
   role?: "main" | "child";
+  loginAutomationState?: "attempting" | "complete" | "manual";
 };
 
 export type AutomationContentCommand =
   | { type: "AUTOMATION_COMMAND"; command: "observe-coin" }
+  | { type: "AUTOMATION_COMMAND"; command: "sign-in"; username: string; password: string }
   | { type: "AUTOMATION_COMMAND"; command: "collect-daily" }
   | { type: "AUTOMATION_COMMAND"; command: "open-drawer" }
   | { type: "AUTOMATION_COMMAND"; command: "observe-drawer" }
@@ -492,6 +516,12 @@ export type AutomationContentCommand =
   | { type: "AUTOMATION_COMMAND"; command: "refresh-stats" }
   | { type: "AUTOMATION_COMMAND"; command: "observe-stats" };
 
+export type AutomationLoginFormCommand = {
+  type: "AUTOMATION_LOGIN_FORM";
+  username: string;
+  password: string;
+};
+
 export type AutomationContentResponse = {
   ok: boolean;
   operation: string;
@@ -499,6 +529,10 @@ export type AutomationContentResponse = {
   error?: string;
   evidence?: CompletionEvidence;
   coinIndex?: CoinIndexObservation;
+  loginPanel?: LoginPanelObservation;
+  loginFrameRequired?: boolean;
+  loginSubmitted?: boolean;
+  loginRedirectedToDesktopHome?: boolean;
   taskDrawer?: TaskDrawerObservation;
   surprise?: SurpriseObservation;
   quiz?: QuizObservation;
@@ -529,12 +563,17 @@ export type Phase0Message =
   | { type: "AUTOMATION_VIEW_TAB" }
   | { type: "AUTOMATION_GET_STATE" }
   | { type: "AUTOMATION_SAVE_SETTINGS"; settings: AutomationSettings }
+  | { type: "CREDENTIALS_GET_STATUS" }
+  | { type: "CREDENTIALS_SAVE"; username: string; password: string }
+  | { type: "CREDENTIALS_CLEAR" }
   | { type: "AUTOMATION_CLEAR_LOGS" }
   | { type: "STATS_CLEAR_HISTORY" }
   | { type: "DIAGNOSTICS_CLEAR" }
   | { type: "DIAGNOSTICS_EXPORT" }
   | { type: "AUTOMATION_ARM_NAVIGATION"; taskId: TaskId; itemId?: string }
   | { type: "AUTOMATION_DISARM_NAVIGATION"; expectedId: string }
+  | { type: "AUTOMATION_LOGIN_TRUSTED_INPUT"; field: "username" | "password"; value: string }
+  | AutomationLoginFormCommand
   | { type: "AUTOMATION_SURPRISE_TRUSTED_CLICK"; itemId: string; round: number; selector: string; x: number; y: number }
   | { type: "AUTOMATION_SURPRISE_CARD_ACCEPTED"; itemId: string }
   | AutomationContentCommand
@@ -557,4 +596,5 @@ export type Phase0Response = {
   statsRefreshing?: boolean;
   diagnostics?: DiagnosticsSnapshot;
   diagnosticsExport?: string;
+  credentialStatus?: CredentialStatus;
 };

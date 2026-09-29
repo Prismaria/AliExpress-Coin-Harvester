@@ -16,6 +16,7 @@ import {
   findVisiblePhrase,
   hasClickGeometry,
   observeCoinIndex,
+  observeLoginPanel,
   observePage,
   observeQuiz,
   observeStats,
@@ -24,7 +25,7 @@ import {
 } from "../src/content/dom-contracts";
 import { parseStatsDocument } from "../src/content/stats-contracts";
 import { STATS_URL } from "../src/shared/constants";
-import { isAliExpressPageUrl, isAllowedProbeUrl, safeUrl } from "../src/shared/routes";
+import { isAliExpressDesktopHomePageUrl, isAliExpressLoginPageUrl, isAliExpressPageUrl, isAllowedProbeUrl, safeUrl } from "../src/shared/routes";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -47,6 +48,65 @@ describe("supplied DOM contracts", () => {
     expect(observation.buttonHasGeometry).toBe(false);
     expect(observation.buttonText).toBe("collect");
     expect(observation.state).toBe("collectable");
+  });
+
+  it("recognizes the AliExpress login button on the coin page", () => {
+    const document = new JSDOM(`<!doctype html><body>
+      <div class="aecoin-loginButtonContainer-2rtjc">
+        <button class="aecoin-loginButton-3pcZm">Log in</button>
+      </div>
+    </body>`).window.document;
+
+    expect(observeCoinIndex(document)).toMatchObject({
+      loginButtonFound: true,
+      buttonFound: false,
+      state: "login-required"
+    });
+  });
+
+  it("identifies the email step without mistaking alternate sign-in methods for challenges", () => {
+    const document = new JSDOM(`<!doctype html><body>
+      <div class="cosmos-drawer cosmos-drawer-right"><div class="cosmos-drawer-body">
+        <h1>Register/Sign in</h1>
+        <input autocomplete="username webauthn" aria-label="Email or phone number" />
+        <button aria-label="Continue" disabled>Continue</button>
+        <button aria-label="Sign in with email code">Sign in with email code</button>
+        <button aria-label="Sign in with passkey">Sign in with passkey</button>
+        <div id="baxia-login-check-code"></div>
+      </div></div>
+    </body>`).window.document;
+
+    expect(observeLoginPanel(document)).toMatchObject({
+      drawerFound: true,
+      stage: "email",
+      accountInputFound: true,
+      continueButtonFound: true,
+      continueButtonEnabled: false,
+      challengeDetected: false
+    });
+  });
+
+  it("identifies the password step and active verification challenge", () => {
+    const document = new JSDOM(`<!doctype html><body>
+      <div class="cosmos-drawer cosmos-drawer-right"><div class="cosmos-drawer-body">
+        <h1>Sign in</h1>
+        <input autocomplete="username" name="account" />
+        <input id="fm-login-password" name="fm-login-password" type="password" aria-label="Password" />
+        <button aria-label="Sign in" disabled>Sign in</button>
+        <div id="baxia-login-check-code"></div>
+      </div></div>
+    </body>`).window.document;
+    expect(observeLoginPanel(document)).toMatchObject({
+      stage: "password",
+      accountInputFound: true,
+      passwordInputFound: true,
+      signInButtonFound: true,
+      challengeDetected: false
+    });
+
+    const challenge = document.querySelector("#baxia-login-check-code");
+    challenge?.append(document.createElement("iframe"));
+    expect(observeLoginPanel(document)).toMatchObject({ stage: "challenge", challengeDetected: true });
   });
 
   it("does not treat a wireframe button as safely clickable", () => {
@@ -406,6 +466,12 @@ describe("supplied DOM contracts", () => {
     expect(classifyRoute("https://m.aliexpress.com/p/coin-index/index.html?foo=bar")).toBe("coin-index");
     expect(classifyRoute(STATS_URL)).toBe("stats");
     expect(classifyRoute("https://m.aliexpress.com/p/ug-login-page/login.html?from=coin")).toBe("login");
+    expect(isAliExpressLoginPageUrl("https://login.aliexpress.com/msite.html")).toBe(true);
+    expect(isAliExpressLoginPageUrl("https://www.aliexpress.com/p/ug-login-page/login.html")).toBe(true);
+    expect(isAliExpressLoginPageUrl("https://example.test/msite.html")).toBe(false);
+    expect(isAliExpressDesktopHomePageUrl("https://www.aliexpress.com/")).toBe(true);
+    expect(isAliExpressDesktopHomePageUrl("https://www.aliexpress.com/item/123.html")).toBe(false);
+    expect(isAliExpressDesktopHomePageUrl("https://m.aliexpress.com/")).toBe(false);
     expect(safeUrl("https://m.aliexpress.com/p/coin-index/adclick.html?taskInstanceId=secret")).toBe(
       "https://m.aliexpress.com/p/coin-index/adclick.html"
     );

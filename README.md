@@ -9,6 +9,7 @@ You can start the automation from the popup or set a daily schedule. If the brow
 ## Automated Routine
 
 - Collects the streak check-in: 10 coins on day 1, 20 on day 2, 30 on day 3, 40 on day 4, and 50 each day from day 5 onward.
+- Can use sign-in details saved in Settings for regular email-and-password login in automation or the manual mobile probe; security checks still need you.
 - Completes the separate `+1` Daily check-in task from the task drawer.
 - Handles sponsored items, surprise items, recently viewed items, the Coins Savings Recap, Super discounts, coin search, coupons and shopping credits, and the daily quiz.
 - Completes repeated task rounds instead of stopping after the first reward.
@@ -63,7 +64,7 @@ The extension does not place orders or make purchases. Settings, results, and di
 
 ## Install a Release
 
-1. Download [`ali-coin-harvester-v0.94.zip`](https://github.com/Prismaria/AliExpress-Coin-Harvester/releases/download/v0.94/ali-coin-harvester-v0.94.zip) from the Releases page.
+1. Download [`ali-coin-harvester-v0.95.zip`](https://github.com/Prismaria/AliExpress-Coin-Harvester/releases/download/v0.95/ali-coin-harvester-v0.95.zip) from the Releases page.
 2. Unzip it to a permanent folder. Do not load the ZIP file itself.
 3. Open `chrome://extensions` and enable **Developer mode**.
 4. Choose **Load unpacked** and select the unzipped extension folder.

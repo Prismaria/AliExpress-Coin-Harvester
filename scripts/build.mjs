@@ -37,6 +37,13 @@ await build({
 await build({
   ...common,
   format: "iife",
+  entryPoints: [resolve(projectRoot, "src/content/login-frame.ts")],
+  outfile: resolve(dist, "content/login-frame.js")
+});
+
+await build({
+  ...common,
+  format: "iife",
   entryPoints: [resolve(projectRoot, "src/content/mtop-bridge-main.ts")],
   outfile: resolve(dist, "content/mtop-bridge-main.js")
 });

@@ -93,6 +93,27 @@
           <label class="field"><span>Refresh interval</span><span class="input-with-unit"><input id="stats-refresh-minutes" type="number" min="5" max="60" step="1" inputmode="numeric" /><em>minutes</em></span></label>
         </section>
 
+        <section class="panel" aria-labelledby="credentials-heading">
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">ACCOUNT</p>
+              <h2 id="credentials-heading">AliExpress sign-in</h2>
+            </div>
+            <span id="credentials-badge" class="panel-badge">Not saved</span>
+          </div>
+          <p class="panel-intro">Save your sign-in details to let automation or the manual mobile probe try the regular email-and-password flow when AliExpress asks you to log in. Security checks still require you.</p>
+          <div class="credential-fields">
+            <label class="field"><span>Email or phone number</span><input id="credentials-username" type="text" autocomplete="username" maxlength="320" /></label>
+            <label class="field"><span>Password</span><input id="credentials-password" type="password" autocomplete="new-password" maxlength="40" /></label>
+          </div>
+          <p class="hint">Credentials are encrypted and kept in this Chrome profile; they are not synced. The encryption key is stored in the same profile, so this does not protect against someone with access to your Chrome profile.</p>
+          <div class="button-row">
+            <button id="credentials-save" class="small-button" type="button">Save credentials</button>
+            <button id="credentials-clear" class="small-button" type="button" disabled>Clear saved credentials</button>
+          </div>
+          <p id="credentials-status" class="saved" role="status" aria-live="polite"></p>
+        </section>
+
         <section class="panel tasks-panel" aria-labelledby="tasks-heading">
           <div class="section-heading">
             <div>
@@ -131,7 +152,7 @@
               <h2 id="data-heading">Data and privacy</h2>
             </div>
           </div>
-          <p class="panel-intro">Data stays in extension storage. Credentials, cookies, and account secrets are never saved.</p>
+          <p class="panel-intro">Settings, coin history, and diagnostics stay in extension storage. Saved sign-in details are managed separately and are not synced.</p>
           <div class="field-grid">
             <label class="field"><span>History retention</span><span class="input-with-unit"><input id="history-retention-months" type="number" min="1" max="6" step="1" inputmode="numeric" /><em>months</em></span></label>
             <label class="field"><span>Diagnostics retention</span><span class="input-with-unit"><input id="diagnostics-retention-days" type="number" min="1" max="365" step="1" inputmode="numeric" /><em>days</em></span></label>

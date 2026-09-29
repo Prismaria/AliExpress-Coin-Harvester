@@ -22,6 +22,28 @@ export function isAliExpressPageUrl(rawUrl: string | undefined): boolean {
   }
 }
 
+export function isAliExpressLoginPageUrl(rawUrl: string | undefined): boolean {
+  if (!rawUrl) return false;
+  try {
+    const url = new URL(rawUrl);
+    if (url.protocol !== "https:") return false;
+    return (url.hostname === "login.aliexpress.com" && url.pathname === "/msite.html") ||
+      ((url.hostname === "m.aliexpress.com" || url.hostname === "www.aliexpress.com") && url.pathname.startsWith("/p/ug-login-page/"));
+  } catch {
+    return false;
+  }
+}
+
+export function isAliExpressDesktopHomePageUrl(rawUrl: string | undefined): boolean {
+  if (!rawUrl) return false;
+  try {
+    const url = new URL(rawUrl);
+    return url.protocol === "https:" && url.hostname === "www.aliexpress.com" && url.pathname === "/";
+  } catch {
+    return false;
+  }
+}
+
 export function classifyRoute(rawUrl: string): RouteKind {
   try {
     const url = new URL(rawUrl);
@@ -31,7 +53,7 @@ export function classifyRoute(rawUrl: string): RouteKind {
     if (path.endsWith("/p/coin-index/adclick.html")) return "surprise-items";
     if (path.endsWith("/p/coin-index/coinquest.html")) return "quiz";
     if (path.endsWith("/p/coin-pc-index/mycoin.html")) return "stats";
-    if (path.includes("/p/ug-login-page/login.html")) return "login";
+    if (isAliExpressLoginPageUrl(rawUrl) || path.includes("/p/ug-login-page/login.html")) return "login";
     if (path.includes("/p/coin-pc-index/")) return "coin-pc-index";
     if (path.startsWith("/item/")) return "item";
     return "other";

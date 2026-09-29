@@ -314,6 +314,7 @@ describe("automation policy", () => {
       },
       coinIndex: {
         rootFound: true,
+        loginButtonFound: false,
         buttonFound: true,
         buttonVisible: true,
         buttonHasGeometry: true,

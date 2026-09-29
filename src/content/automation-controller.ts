@@ -6,11 +6,15 @@ import {
   findSurpriseCompletion,
   findSurpriseItemId,
   findCoinButton,
+  findLoginAccountInput,
+  findLoginActionButton,
+  findLoginPasswordInput,
   findTaskAction,
   hasClickGeometry,
   isVisible,
   normalizeText,
   observeCoinIndex,
+  observeLoginPanel,
   observeQuiz,
   observeSurprise,
   observeTaskDrawer
@@ -18,11 +22,14 @@ import {
 import {
   AUTOMATION_POLL_INTERVAL_MS,
   HISTORY_NO_GROWTH_LIMIT,
+  LOGIN_DRAWER_WAIT_MS,
+  LOGIN_FLOW_WAIT_MS,
   MAX_HISTORY_SCROLL_ROUNDS,
   SURPRISE_COMPLETION_WAIT_MS
 } from "../shared/constants";
 import { historyCategoryFromText, parseStatsDocument } from "./stats-contracts";
 import { historyCutoffKey, MAX_STORED_HISTORY_ENTRIES } from "../shared/stats-history";
+import { isAliExpressDesktopHomePageUrl } from "../shared/routes";
 import type {
   AutomationContentCommand,
   AutomationContentResponse,
@@ -111,6 +118,160 @@ function isVerifiedCoinState(state: ReturnType<typeof observeCoinIndex>["state"]
   return state === "collectable" || state === "task-opener" || state === "already-checked";
 }
 
+function setInputValue(input: HTMLInputElement, value: string): void {
+  const prototype = input.ownerDocument.defaultView?.HTMLInputElement.prototype;
+  const setter = prototype && Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+  if (setter) setter.call(input, value);
+  else input.value = value;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+async function fillLoginInput(input: HTMLInputElement, value: string, field: "username" | "password"): Promise<boolean> {
+  input.focus({ preventScroll: true });
+  input.select();
+  const trustedInput = await sendWorker({ type: "AUTOMATION_LOGIN_TRUSTED_INPUT", field, value });
+  if (trustedInput.ok) {
+    const applied = await waitFor(() => input.value, (current) => current === value, 2_000);
+    if (applied) return true;
+  }
+  setInputValue(input, value);
+  return input.value === value;
+}
+
+async function submitLoginStep(button: HTMLButtonElement, input: HTMLInputElement): Promise<boolean> {
+  if (isDisabled(button) || !isVisible(button)) return false;
+  const point = clickPoint(button);
+  if (point) return clickVerified(button, point);
+
+  input.focus({ preventScroll: true });
+  for (const type of ["keydown", "keypress", "keyup"]) {
+    input.dispatchEvent(new KeyboardEvent(type, { key: "Enter", code: "Enter", bubbles: true, cancelable: true }));
+  }
+  return true;
+}
+
+async function signIn(username: string, password: string): Promise<AutomationContentResponse> {
+  const initial = await waitFor(
+    observeCoinIndex.bind(null, document),
+    (value) => value.state === "login-required" || isVerifiedCoinState(value.state)
+  );
+  if (!initial) return response("sign-in", "manual_action_required", { error: "The Coins page could not be verified before sign-in" });
+  if (isVerifiedCoinState(initial.state)) {
+    return response("sign-in", "success", { coinIndex: initial, evidence: evidence("coin-state", "The Coins page is already signed in") });
+  }
+
+  let panel = observeLoginPanel(document);
+  if (panel.stage === "closed" || panel.stage === "unknown") {
+    const loginButton = document.querySelector<HTMLButtonElement>(".aecoin-loginButtonContainer-2rtjc button.aecoin-loginButton-3pcZm");
+    if (!loginButton || !isVisible(loginButton) || isDisabled(loginButton)) {
+      return response("sign-in", "manual_action_required", { error: "The AliExpress login button is not safely available" });
+    }
+    const loginPoint = clickPoint(loginButton);
+    if (!loginPoint || !(await clickVerified(loginButton, loginPoint))) {
+      return response("sign-in", "manual_action_required", { error: "The AliExpress login panel could not be opened safely" });
+    }
+
+    // AliExpress animates and mounts this drawer asynchronously after the Coins login button is clicked.
+    await delay(LOGIN_DRAWER_WAIT_MS);
+    const openedPanel = await waitFor(
+      observeLoginPanel.bind(null, document),
+      (value) => value.stage !== "closed" && value.stage !== "unknown",
+      3_000
+    );
+    if (!openedPanel) {
+      return response("sign-in", "manual_action_required", {
+        loginFrameRequired: true,
+        error: "AliExpress opened its sign-in form in a separate login frame"
+      });
+    }
+    panel = openedPanel;
+  }
+  if (panel.stage === "challenge") {
+    return response("sign-in", "manual_action_required", { loginPanel: panel, error: "AliExpress requires a manual security check" });
+  }
+
+  let accountInput = findLoginAccountInput(document);
+  if (accountInput) {
+    if (isDisabled(accountInput)) return response("sign-in", "manual_action_required", { loginPanel: panel, error: "The AliExpress account field is not editable" });
+    if (!(await fillLoginInput(accountInput, username, "username"))) {
+      return response("sign-in", "manual_action_required", { loginPanel: panel, error: "AliExpress did not accept the account name" });
+    }
+    username = "";
+  }
+
+  if (panel.stage === "email") {
+    accountInput = findLoginAccountInput(document);
+    if (!accountInput) {
+      return response("sign-in", "manual_action_required", { loginPanel: panel, error: "The AliExpress email step did not match the expected form" });
+    }
+    const continueButton = await waitFor(
+      () => findLoginActionButton(document, "continue"),
+      (button) => Boolean(button && !isDisabled(button)),
+      5_000
+    );
+    if (!continueButton || !(await submitLoginStep(continueButton, accountInput))) {
+      return response("sign-in", "manual_action_required", { loginPanel: observeLoginPanel(document), error: "AliExpress did not enable the Continue action" });
+    }
+    const nextPanel = await waitFor(
+      observeLoginPanel.bind(null, document),
+      (value) => value.stage === "password" || value.stage === "challenge",
+      LOGIN_FLOW_WAIT_MS
+    );
+    if (!nextPanel) return response("sign-in", "manual_action_required", { error: "AliExpress did not advance to the password step" });
+    panel = nextPanel;
+    if (panel.stage === "challenge") {
+      return response("sign-in", "manual_action_required", { loginPanel: panel, error: "AliExpress requires a manual security check" });
+    }
+  }
+
+  const passwordInput = findLoginPasswordInput(document);
+  if (!passwordInput || isDisabled(passwordInput)) {
+    return response("sign-in", "manual_action_required", { loginPanel: observeLoginPanel(document), error: "The AliExpress password step is not safely available" });
+  }
+  if (passwordInput.maxLength > 0 && password.length > passwordInput.maxLength) {
+    return response("sign-in", "manual_action_required", { loginPanel: observeLoginPanel(document), error: "The saved password is longer than AliExpress accepts in this form; update it in Settings" });
+  }
+  if (!(await fillLoginInput(passwordInput, password, "password"))) {
+    return response("sign-in", "manual_action_required", { loginPanel: observeLoginPanel(document), error: "AliExpress did not accept the saved password" });
+  }
+  password = "";
+
+  let signInButton = findLoginActionButton(document, "sign in");
+  signInButton = await waitFor(
+    () => findLoginActionButton(document, "sign in"),
+    (button) => Boolean(button && !isDisabled(button)),
+    5_000
+  );
+  if (!signInButton || !(await submitLoginStep(signInButton, passwordInput))) {
+    return response("sign-in", "manual_action_required", { loginPanel: observeLoginPanel(document), error: "AliExpress did not enable the Sign in action" });
+  }
+
+  const signInOutcome = await waitFor(
+    () => ({ coinIndex: observeCoinIndex(document), loginPanel: observeLoginPanel(document), desktopHome: isAliExpressDesktopHomePageUrl(document.location.href) }),
+    (value) => (value.coinIndex.loginButtonFound === false && isVerifiedCoinState(value.coinIndex.state)) || value.loginPanel.stage === "challenge" || value.desktopHome,
+    LOGIN_FLOW_WAIT_MS
+  );
+  if (signInOutcome?.loginPanel.stage === "challenge") {
+    return response("sign-in", "manual_action_required", { loginPanel: signInOutcome.loginPanel, error: "AliExpress requires a manual security check" });
+  }
+  if (signInOutcome?.desktopHome) {
+    return response("sign-in", "success", { loginRedirectedToDesktopHome: true });
+  }
+  if (signInOutcome && isVerifiedCoinState(signInOutcome.coinIndex.state) && !signInOutcome.coinIndex.loginButtonFound) {
+    return response("sign-in", "success", {
+      coinIndex: signInOutcome.coinIndex,
+      evidence: evidence("coin-state", "AliExpress returned to a verified signed-in Coins page")
+    });
+  }
+
+  const finalPanel = observeLoginPanel(document);
+  if (finalPanel.stage === "challenge") {
+    return response("sign-in", "manual_action_required", { loginPanel: finalPanel, error: "AliExpress requires a manual security check" });
+  }
+  return response("sign-in", "login_required", { loginPanel: finalPanel, error: "AliExpress sign-in was not confirmed; check the form and resume" });
+}
+
 function clickPoint(element: Element): { x: number; y: number } | undefined {
   if (!isVisible(element) || isDisabled(element)) return undefined;
   const htmlElement = element as HTMLElement;
@@ -159,9 +320,12 @@ async function clickVerified(element: Element, point = clickPoint(element)): Pro
 async function observeCoin(): Promise<AutomationContentResponse> {
   const observation = await waitFor(
     observeCoinIndex.bind(null, document),
-    (value) => value.rootFound && value.buttonFound && isVerifiedCoinState(value.state)
+    (value) => value.state === "login-required" || (value.rootFound && value.buttonFound && isVerifiedCoinState(value.state))
   );
   if (!observation) return response("observe-coin", "retryable_error", { error: "Coin page did not stabilize" });
+  if (observation.state === "login-required") {
+    return response("observe-coin", "login_required", { coinIndex: observation, error: "AliExpress login is required before coin automation can continue" });
+  }
   return response("observe-coin", "success", { coinIndex: observation });
 }
 
@@ -750,6 +914,16 @@ async function handleCommand(command: AutomationContentCommand): Promise<Automat
   switch (command.command) {
     case "observe-coin":
       return observeCoin();
+    case "sign-in": {
+      let username = command.username;
+      let password = command.password;
+      command.username = "";
+      command.password = "";
+      const result = await signIn(username, password);
+      username = "";
+      password = "";
+      return result;
+    }
     case "collect-daily":
       return collectDaily();
     case "open-drawer":
@@ -783,6 +957,10 @@ chrome.runtime.onMessage.addListener((message: Phase0Message, _sender, sendRespo
   if (message.type !== "AUTOMATION_COMMAND") return false;
   void handleCommand(message)
     .then(sendResponse)
-    .catch((error: unknown) => sendResponse(response("command", "fatal_error", { error: error instanceof Error ? error.message : String(error) })));
+    .catch((error: unknown) => sendResponse(response(
+      "command",
+      message.command === "sign-in" ? "manual_action_required" : "fatal_error",
+      { error: message.command === "sign-in" ? "Saved sign-in could not be completed safely" : error instanceof Error ? error.message : String(error) }
+    )));
   return true;
 });

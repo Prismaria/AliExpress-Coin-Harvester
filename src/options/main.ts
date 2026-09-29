@@ -28,6 +28,12 @@ const diagnosticsRetentionDays = document.querySelector<HTMLInputElement>("#diag
 const clearHistory = document.querySelector<HTMLButtonElement>("#clear-history");
 const clearDiagnostics = document.querySelector<HTMLButtonElement>("#clear-diagnostics");
 const dataStatus = document.querySelector<HTMLElement>("#data-status");
+const credentialUsername = document.querySelector<HTMLInputElement>("#credentials-username");
+const credentialPassword = document.querySelector<HTMLInputElement>("#credentials-password");
+const credentialBadge = document.querySelector<HTMLElement>("#credentials-badge");
+const credentialStatus = document.querySelector<HTMLElement>("#credentials-status");
+const credentialSave = document.querySelector<HTMLButtonElement>("#credentials-save");
+const credentialClear = document.querySelector<HTMLButtonElement>("#credentials-clear");
 const themeToggle = document.querySelector<HTMLButtonElement>("#theme-toggle");
 const themeLabel = document.querySelector<HTMLElement>("#theme-label");
 let currentSettings: AutomationSettings = DEFAULT_SETTINGS;
@@ -206,6 +212,9 @@ async function loadSettings(): Promise<void> {
   diagnosticsRetentionDays?.addEventListener("change", saveCurrent);
   for (const input of document.querySelectorAll<HTMLInputElement>("input[data-timeout]")) input.addEventListener("change", saveCurrent);
   taskSettings?.addEventListener("change", saveCurrent);
+  await loadCredentialStatus();
+  credentialSave?.addEventListener("click", () => void saveCredentials());
+  credentialClear?.addEventListener("click", () => void clearCredentials());
   selectAllTasks?.addEventListener("click", () => {
     setTaskSelection(true);
     void saveCurrent();
@@ -240,6 +249,62 @@ async function loadSettings(): Promise<void> {
     currentSettings = DEFAULT_SETTINGS;
     void saveSettings(DEFAULT_SETTINGS);
   });
+}
+
+async function loadCredentialStatus(): Promise<void> {
+  const response = await send({ type: "CREDENTIALS_GET_STATUS" });
+  const savedCredential = response.credentialStatus?.saved === true;
+  if (credentialUsername) credentialUsername.value = savedCredential ? response.credentialStatus?.username ?? "" : "";
+  if (credentialPassword) credentialPassword.value = "";
+  if (credentialBadge) credentialBadge.textContent = !response.ok ? "Needs attention" : savedCredential ? "Saved" : "Not saved";
+  if (credentialClear) credentialClear.disabled = response.ok && !savedCredential;
+  if (credentialStatus) {
+    credentialStatus.textContent = response.ok
+      ? savedCredential ? "Saved credentials are ready for an automation sign-in." : "No credentials saved. Automation will pause for manual sign-in."
+      : response.error ?? "Could not read saved credential status.";
+  }
+}
+
+async function saveCredentials(): Promise<void> {
+  const username = credentialUsername?.value.trim() ?? "";
+  let password = credentialPassword?.value ?? "";
+  if (!username || !password) {
+    if (credentialStatus) credentialStatus.textContent = "Enter both your AliExpress account and password to save them.";
+    return;
+  }
+  if (credentialSave) credentialSave.disabled = true;
+  if (credentialStatus) credentialStatus.textContent = "Encrypting and saving credentials…";
+  try {
+    const response = await send({ type: "CREDENTIALS_SAVE", username, password });
+    if (!response.ok) {
+      if (credentialStatus) credentialStatus.textContent = response.error ?? "Credentials could not be saved.";
+      return;
+    }
+    if (credentialUsername) credentialUsername.value = response.credentialStatus?.username ?? username;
+    if (credentialPassword) credentialPassword.value = "";
+    if (credentialBadge) credentialBadge.textContent = "Saved";
+    if (credentialClear) credentialClear.disabled = false;
+    if (credentialStatus) credentialStatus.textContent = "Credentials encrypted and saved in this Chrome profile.";
+  } finally {
+    password = "";
+    if (credentialPassword) credentialPassword.value = "";
+    if (credentialSave) credentialSave.disabled = false;
+  }
+}
+
+async function clearCredentials(): Promise<void> {
+  if (!window.confirm("Clear the saved AliExpress sign-in details from this Chrome profile?")) return;
+  if (credentialClear) credentialClear.disabled = true;
+  const response = await send({ type: "CREDENTIALS_CLEAR" });
+  if (!response.ok) {
+    if (credentialStatus) credentialStatus.textContent = response.error ?? "Saved credentials could not be cleared.";
+    if (credentialClear) credentialClear.disabled = false;
+    return;
+  }
+  if (credentialUsername) credentialUsername.value = "";
+  if (credentialPassword) credentialPassword.value = "";
+  if (credentialBadge) credentialBadge.textContent = "Not saved";
+  if (credentialStatus) credentialStatus.textContent = "Saved credentials cleared.";
 }
 
 async function clearLocalData(message: Phase0Message, label: string): Promise<void> {

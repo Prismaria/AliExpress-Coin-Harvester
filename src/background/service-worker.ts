@@ -17,6 +17,8 @@ import {
   CONTROLLED_CHILD_LAUNCH_PREFIX,
   DAILY_COLLECT_RETRY_DELAY_MS,
   DAILY_ALARM_NAME,
+  LOGIN_FLOW_WAIT_MS,
+  LOGIN_FORM_FRAME_WAIT_MS,
   MAX_STORED_REPORTS,
   MAX_AUTOMATION_LOGS,
   MOBILE_RULE_ID_START,
@@ -55,15 +57,18 @@ import {
   taskRetriesUntilComplete,
   taskRequiresChildNavigation
 } from "../shared/task-catalog";
-import { classifyRoute, isAliExpressPageUrl, isAllowedProbeUrl, safeUrl } from "../shared/routes";
+import { classifyRoute, isAliExpressDesktopHomePageUrl, isAliExpressLoginPageUrl, isAliExpressPageUrl, isAllowedProbeUrl, safeUrl } from "../shared/routes";
 import { cacheStatsSnapshot, createRefreshCoalescer, formatCoinBadge, isStatsCacheFresh, isStatsCacheRecord, isStatsHistoryCacheRecord, markStatsCacheStale, STATS_HISTORY_CACHE_SCHEMA_VERSION } from "../shared/stats-cache";
+import { shouldAutoLoginManualProbe } from "../shared/manual-probe-login";
 import { MAX_STORED_HISTORY_ENTRIES, mergeHistory } from "../shared/stats-history";
 import { notificationForRun } from "../shared/notifications";
 import { buildDiagnostics, diagnosticsJson } from "../shared/diagnostics";
+import { createCredentialVault, CredentialVaultError } from "./credential-vault";
 import type {
   AutomationChildTab,
   AutomationContentCommand,
   AutomationContentResponse,
+  AutomationLoginFormCommand,
   AutomationLease,
   AutomationLogEntry,
   AutomationRun,
@@ -93,6 +98,8 @@ const pendingMainDrives = new Set<string>();
 const activeChildControllers = new Set<number>();
 const activeTaskOutcomeWaits = new Set<string>();
 const statsRefreshCoalescer = createRefreshCoalescer<StatsSnapshot | undefined>();
+const credentialVault = createCredentialVault(chrome.storage.local);
+let localStorageRestrictedToTrustedContexts = false;
 
 function serialized<T>(operation: () => Promise<T>): Promise<T> {
   const next = mutationQueue.then(operation, operation);
@@ -367,10 +374,11 @@ async function setLease(lease: AutomationLease | undefined): Promise<void> {
 }
 
 async function setTrustedStorageAccess(): Promise<void> {
-  await Promise.all([
+  const results = await Promise.allSettled([
     chrome.storage.local.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" }),
     chrome.storage.sync.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" })
-  ]).catch(() => undefined);
+  ]);
+  localStorageRestrictedToTrustedContexts = results[0].status === "fulfilled";
 }
 
 function waitForMainFrameCommit(tabId: number, timeoutMs = 30_000): { promise: Promise<void>; cancel: () => void } {
@@ -621,6 +629,9 @@ async function reconcileSessions(): Promise<void> {
   for (const session of Object.values(sessions)) {
     try {
       await chrome.tabs.get(session.tabId);
+      if (session.owner === "manual" && session.loginAutomationState === "attempting") {
+        session.loginAutomationState = undefined;
+      }
       if (session.mobile && (session.ruleId === undefined || !existingRuleIds.has(session.ruleId))) {
         session.ruleId = await installMobileUserAgentRule(session.tabId);
         existingRuleIds.add(session.ruleId);
@@ -747,16 +758,170 @@ function errorResult(operation: string, error: unknown): AutomationContentRespon
   };
 }
 
-async function sendContentCommand(tabId: number, command: AutomationContentCommand): Promise<AutomationContentResponse> {
+async function sendContentCommand(
+  tabId: number,
+  command: AutomationContentCommand | AutomationLoginFormCommand,
+  frameId?: number
+): Promise<AutomationContentResponse> {
   return new Promise((resolve) => {
-    chrome.tabs.sendMessage(tabId, command, (result: AutomationContentResponse | undefined) => {
+    const complete = (result: AutomationContentResponse | undefined): void => {
       if (chrome.runtime.lastError) {
         resolve(errorResult("send-content-command", chrome.runtime.lastError.message));
         return;
       }
       resolve(result ?? errorResult("send-content-command", "Content script returned no response"));
+    };
+    if (frameId === undefined) chrome.tabs.sendMessage(tabId, command, complete);
+    else chrome.tabs.sendMessage(tabId, command, { frameId }, complete);
+  });
+}
+
+async function getTabFrames(tabId: number): Promise<chrome.webNavigation.GetAllFrameResultDetails[]> {
+  try {
+    return (await chrome.webNavigation.getAllFrames({ tabId })) ?? [];
+  } catch {
+    return [];
+  }
+}
+
+async function sendLoginFormCommand(
+  tabId: number,
+  frameId: number,
+  credentials: { username: string; password: string }
+): Promise<AutomationContentResponse> {
+  const command: AutomationLoginFormCommand = {
+    type: "AUTOMATION_LOGIN_FORM",
+    username: credentials.username,
+    password: credentials.password
+  };
+  try {
+    return await sendContentCommand(tabId, command, frameId);
+  } finally {
+    command.username = "";
+    command.password = "";
+  }
+}
+
+async function waitForLoginFormFrame(tabId: number, credentials: { username: string; password: string }): Promise<AutomationContentResponse> {
+  const deadline = Date.now() + LOGIN_FORM_FRAME_WAIT_MS;
+  while (Date.now() < deadline) {
+    const frames = await getTabFrames(tabId);
+    const loginFrames = frames.filter((candidate) => isAliExpressLoginPageUrl(candidate.url));
+    for (const frame of loginFrames) {
+      const result = await sendLoginFormCommand(tabId, frame.frameId, credentials);
+      if (result.operation !== "send-content-command") return result;
+    }
+    const tab = await chrome.tabs.get(tabId).catch(() => undefined);
+    if (isAliExpressDesktopHomePageUrl(tab?.url)) {
+      return { ok: true, operation: "login-frame", result: "success", loginSubmitted: true };
+    }
+    await delay(250);
+  }
+  return {
+    ok: false,
+    operation: "login-frame",
+    result: "manual_action_required",
+    error: "AliExpress login form frame was not available to the extension"
+  };
+}
+
+async function waitForSignedInCoinPage(tabId: number): Promise<AutomationContentResponse> {
+  const deadline = Date.now() + LOGIN_FLOW_WAIT_MS;
+  let latest: AutomationContentResponse | undefined;
+  let redirectedFromDesktopHome = false;
+  while (Date.now() < deadline) {
+    if (!redirectedFromDesktopHome) {
+      const tab = await chrome.tabs.get(tabId).catch(() => undefined);
+      if (isAliExpressDesktopHomePageUrl(tab?.url)) {
+        try {
+          await navigateWithMobileUserAgent(tabId, COIN_INDEX_URL);
+        } catch {
+          const session = (await getSessionMap())[String(tabId)];
+          if (!session?.mobile) {
+            return { ok: false, operation: "sign-in", result: "manual_action_required", error: "Could not return to the mobile Coins page after sign-in" };
+          }
+          await chrome.tabs.update(tabId, { url: COIN_INDEX_URL });
+        }
+        redirectedFromDesktopHome = true;
+        continue;
+      }
+    }
+    latest = await sendContentCommand(tabId, { type: "AUTOMATION_COMMAND", command: "observe-coin" });
+    if (latest.result === "success" && latest.coinIndex && latest.coinIndex.state !== "login-required") return latest;
+    if (latest.result !== "login_required" && latest.result !== "retryable_error") return latest;
+    await delay(250);
+  }
+  return latest?.result === "manual_action_required"
+    ? latest
+    : { ok: false, operation: "sign-in", result: "login_required", error: "AliExpress sign-in was not confirmed on the Coins page" };
+}
+
+async function performSavedSignIn(tabId: number, credentials: { username: string; password: string }): Promise<AutomationContentResponse> {
+  const topFrame = (await getTabFrames(tabId)).find((frame) => frame.frameId === 0);
+  if (topFrame && isAliExpressLoginPageUrl(topFrame.url)) {
+    const frameResult = await sendLoginFormCommand(tabId, topFrame.frameId, credentials);
+    const result = frameResult.operation === "send-content-command"
+      ? await waitForLoginFormFrame(tabId, credentials)
+      : frameResult;
+    if (result.result !== "success" || result.loginSubmitted !== true) return result;
+    return waitForSignedInCoinPage(tabId);
+  }
+
+  const directCommand: AutomationContentCommand = {
+    type: "AUTOMATION_COMMAND",
+    command: "sign-in",
+    username: credentials.username,
+    password: credentials.password
+  };
+  let direct: AutomationContentResponse;
+  try {
+    direct = await sendContentCommand(tabId, directCommand);
+  } finally {
+    if (directCommand.command === "sign-in") {
+      directCommand.username = "";
+      directCommand.password = "";
+    }
+  }
+  if (direct.result === "success" && direct.loginRedirectedToDesktopHome) return waitForSignedInCoinPage(tabId);
+  if (direct.result === "success" && direct.coinIndex && direct.coinIndex.state !== "login-required") return direct;
+  if (!direct.loginFrameRequired && direct.result !== "retryable_error") return direct;
+
+  const formResult = await waitForLoginFormFrame(tabId, credentials);
+  if (formResult.result !== "success" || formResult.loginSubmitted !== true) return formResult;
+  return waitForSignedInCoinPage(tabId);
+}
+
+async function insertTrustedText(tabId: number, text: string): Promise<boolean> {
+  const target: chrome.debugger.Debuggee = { tabId };
+  let attached = false;
+  const sendCommand = (method: string, params: Record<string, unknown>): Promise<void> => new Promise((resolve, reject) => {
+    chrome.debugger.sendCommand(target, method, params, () => {
+      const error = chrome.runtime.lastError;
+      if (error) reject(new Error(error.message));
+      else resolve();
     });
   });
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      chrome.debugger.attach(target, "1.3", () => {
+        const error = chrome.runtime.lastError;
+        if (error) reject(new Error(error.message));
+        else resolve();
+      });
+    });
+    attached = true;
+    await sendCommand("Input.insertText", { text });
+    return true;
+  } catch {
+    return false;
+  } finally {
+    if (attached) {
+      await new Promise<void>((resolve) => {
+        chrome.debugger.detach(target, () => resolve());
+      });
+    }
+  }
 }
 
 function unavailableStatsSnapshot(detail: string): StatsSnapshot {
@@ -2140,7 +2305,69 @@ async function driveMain(runId: string): Promise<void> {
   });
   recordLog({ level: "info", event: "coin-page-loading", message: "Observing the controlled coin page", runId, tabId: initial.session.mainTabId });
 
-  const observed = await sendContentCommand(initial.session.mainTabId, { type: "AUTOMATION_COMMAND", command: "observe-coin" });
+  let observed = await sendContentCommand(initial.session.mainTabId, { type: "AUTOMATION_COMMAND", command: "observe-coin" });
+  if (observed.result === "login_required") {
+    if (!localStorageRestrictedToTrustedContexts) {
+      await pauseRun(runId, "waiting_for_login", "Credential storage could not be restricted to trusted extension contexts. Sign in manually.");
+      return;
+    }
+    let credentials: Awaited<ReturnType<typeof credentialVault.getCredentials>>;
+    try {
+      credentials = await credentialVault.getCredentials();
+    } catch {
+      await pauseRun(runId, "waiting_for_login", "Saved AliExpress credentials could not be decrypted. Update or clear them in Settings.");
+      return;
+    }
+    if (!credentials) {
+      await pauseRun(runId, "waiting_for_login", observed.error ?? "AliExpress requested login on the coin page");
+      return;
+    }
+
+    recordLog({ level: "info", event: "saved-login-started", message: "Attempting sign-in from the main Coins page", runId, tabId: initial.session.mainTabId });
+    await serialized(async () => {
+      const session = await getAutomationSession();
+      if (session?.runId !== runId) return;
+      session.loginAttemptInProgress = true;
+      await setAutomationSession(session);
+    });
+    let login: AutomationContentResponse;
+    try {
+      login = await performSavedSignIn(initial.session.mainTabId, credentials);
+    } finally {
+      credentials.username = "";
+      credentials.password = "";
+      await serialized(async () => {
+        const session = await getAutomationSession();
+        if (session?.runId !== runId) return;
+        session.loginAttemptInProgress = false;
+        await setAutomationSession(session);
+      });
+    }
+    const canContinue = await serialized(async () => {
+      const currentRun = await getRun();
+      return Boolean(currentRun && currentRun.id === runId && !isTerminalRunState(currentRun.state) && !isPausedRunState(currentRun.state));
+    });
+    if (!canContinue) return;
+    if (login.result !== "success") {
+      recordLog({
+        level: "warn",
+        event: "saved-login-paused",
+        message: "Saved sign-in needs user attention",
+        runId,
+        tabId: initial.session.mainTabId,
+        data: { result: login.result }
+      });
+      await pauseRun(runId, "waiting_for_login", login.error ?? "AliExpress sign-in needs your attention. Complete the step and resume.");
+      return;
+    }
+
+    recordLog({ level: "info", event: "saved-login-finished", message: "Sign-in returned to the Coins page; verifying account state", runId, tabId: initial.session.mainTabId });
+    observed = await sendContentCommand(initial.session.mainTabId, { type: "AUTOMATION_COMMAND", command: "observe-coin" });
+    if (observed.result === "login_required") {
+      await pauseRun(runId, "waiting_for_login", "AliExpress sign-in was not confirmed. Check the page and resume.");
+      return;
+    }
+  }
   if (observed.result !== "success" || !observed.coinIndex) {
     await failRun(runId, observed.result, observed.error ?? "Coin page observation failed");
     return;
@@ -2666,6 +2893,7 @@ async function handleAutomationContentReady(tabId: number, route: string, url: s
     if (!main && !child) return;
     runId = run.id;
 
+    if (main && session.loginAttemptInProgress && (route === "login" || isAliExpressDesktopHomePageUrl(url))) return;
     if (route === "login") {
       await pauseRunLocked(run.id, "waiting_for_login", "AliExpress requested login before the current automation step");
       return;
@@ -3607,6 +3835,7 @@ async function bootstrapLocked(): Promise<void> {
   await cleanupDiagnostics(settings);
   await ensureSchedulerAlarmsLocked(settings);
   await reconcileSessions();
+  void scheduleManualProbeLogins().catch(() => undefined);
   await reconcileAutomationLocked(true);
   await maybeStartCatchUpLocked(settings);
   void refreshStats().catch((error: unknown) => {
@@ -3795,6 +4024,98 @@ async function stateResponse(): Promise<Phase0Response> {
   };
 }
 
+type ManualProbeLoginCandidate = { tabId: number; sessionId: string };
+
+async function updateManualProbeLoginState(candidate: ManualProbeLoginCandidate, state: "complete" | "manual"): Promise<void> {
+  await serialized(async () => {
+    const sessions = await getSessionMap();
+    const session = sessions[String(candidate.tabId)];
+    if (!session || session.id !== candidate.sessionId || session.loginAutomationState !== "attempting") return;
+    session.loginAutomationState = state;
+    await setSessionMap(sessions);
+  });
+}
+
+async function runManualProbeLogin(candidate: ManualProbeLoginCandidate): Promise<void> {
+  const isCurrentAttempt = await serialized(async () => {
+    const session = (await getSessionMap())[String(candidate.tabId)];
+    return Boolean(
+      session && session.id === candidate.sessionId && session.owner === "manual" &&
+      session.mobile && session.role === "main" && session.loginAutomationState === "attempting"
+    );
+  });
+  if (!isCurrentAttempt) return;
+  if (!localStorageRestrictedToTrustedContexts) {
+    await updateManualProbeLoginState(candidate, "manual");
+    return;
+  }
+
+  let credentials: Awaited<ReturnType<typeof credentialVault.getCredentials>>;
+  try {
+    credentials = await credentialVault.getCredentials();
+  } catch {
+    await updateManualProbeLoginState(candidate, "manual");
+    return;
+  }
+  if (!credentials) {
+    await updateManualProbeLoginState(candidate, "manual");
+    return;
+  }
+
+  const stillOwned = await serialized(async () => {
+    const session = (await getSessionMap())[String(candidate.tabId)];
+    return Boolean(
+      session && session.id === candidate.sessionId && session.owner === "manual" &&
+      session.mobile && session.role === "main" && session.loginAutomationState === "attempting"
+    );
+  });
+  if (!stillOwned) {
+    credentials.username = "";
+    credentials.password = "";
+    return;
+  }
+
+  let result: AutomationContentResponse;
+  try {
+    result = await performSavedSignIn(candidate.tabId, credentials);
+  } catch {
+    result = { ok: false, operation: "sign-in", result: "manual_action_required", error: "Saved sign-in could not be completed safely" };
+  } finally {
+    credentials.username = "";
+    credentials.password = "";
+  }
+  await updateManualProbeLoginState(candidate, result.result === "success" ? "complete" : "manual");
+}
+
+async function scheduleManualProbeLogins(tabId?: number, retryManual = false): Promise<void> {
+  const candidates = await serialized(async () => {
+    const [sessions, reports] = await Promise.all([getSessionMap(), getReports()]);
+    const next: ManualProbeLoginCandidate[] = [];
+    let changed = false;
+    for (const session of Object.values(sessions)) {
+      if (tabId !== undefined && session.tabId !== tabId) continue;
+      const report = reports.find((candidate) => candidate.tabId === session.tabId);
+      if (!report) continue;
+      const loginPromptVisible = report.route === "coin-index" && report.coinIndex?.loginButtonFound === true;
+      if (!loginPromptVisible) {
+        if (session.loginAutomationState === "manual") {
+          session.loginAutomationState = undefined;
+          changed = true;
+        }
+        continue;
+      }
+      if (!shouldAutoLoginManualProbe(session, report, retryManual)) continue;
+      session.loginAutomationState = "attempting";
+      changed = true;
+      next.push({ tabId: session.tabId, sessionId: session.id });
+    }
+    if (changed) await setSessionMap(sessions);
+    return next;
+  });
+
+  for (const candidate of candidates) void runManualProbeLogin(candidate).catch(() => undefined);
+}
+
 async function viewAutomationTab(): Promise<Phase0Response> {
   const session = await getAutomationSession();
   if (!session) return { ok: false, error: "No automation tab is available" };
@@ -3824,7 +4145,49 @@ async function clearDiagnostics(): Promise<Phase0Response> {
   return stateResponse();
 }
 
+function isOptionsPageSender(sender: chrome.runtime.MessageSender): boolean {
+  if (sender.id !== chrome.runtime.id || !sender.url) return false;
+  try {
+    const url = new URL(sender.url);
+    return url.protocol === "chrome-extension:" && url.host === chrome.runtime.id && url.pathname === "/options/index.html";
+  } catch {
+    return false;
+  }
+}
+
 async function handleMessage(message: Phase0Message, sender: chrome.runtime.MessageSender): Promise<Phase0Response> {
+  if (message.type === "CREDENTIALS_GET_STATUS" || message.type === "CREDENTIALS_SAVE" || message.type === "CREDENTIALS_CLEAR") {
+    if (!isOptionsPageSender(sender)) return { ok: false, error: "Credential settings are available only from the extension Settings page." };
+    if (!localStorageRestrictedToTrustedContexts && message.type !== "CREDENTIALS_CLEAR") {
+      return { ok: false, error: "Credential storage could not be restricted to trusted extension contexts." };
+    }
+    try {
+      if (message.type === "CREDENTIALS_GET_STATUS") {
+        return { ok: true, credentialStatus: await credentialVault.getStatus() };
+      }
+      if (message.type === "CREDENTIALS_SAVE") {
+        const credentials = { username: message.username, password: message.password };
+        message.username = "";
+        message.password = "";
+        try {
+          const credentialStatus = await credentialVault.save(credentials);
+          void scheduleManualProbeLogins(undefined, true).catch(() => undefined);
+          return { ok: true, credentialStatus };
+        } finally {
+          credentials.username = "";
+          credentials.password = "";
+        }
+      }
+      await credentialVault.clear();
+      return { ok: true, credentialStatus: { saved: false } };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof CredentialVaultError ? error.message : "Credential storage could not be accessed."
+      };
+    }
+  }
+
   if (message.type === "PHASE0_OPEN_MOBILE") {
     return { ok: true, session: await openMobileSession() };
   }
@@ -3879,6 +4242,40 @@ async function handleMessage(message: Phase0Message, sender: chrome.runtime.Mess
   const ownedSession = sessions[String(tabId)];
   const owned = Boolean(ownedSession);
 
+  if (message.type === "AUTOMATION_LOGIN_TRUSTED_INPUT") {
+    if (!ownedSession || !ownedSession.mobile || ownedSession.role !== "main" ||
+      (classifyRoute(sender.url ?? "") !== "coin-index" && !isAliExpressLoginPageUrl(sender.url))) {
+      return { ok: false, error: "Trusted sign-in input is limited to an owned mobile Coins tab." };
+    }
+    if ((message.field !== "username" && message.field !== "password") || typeof message.value !== "string") {
+      return { ok: false, error: "Trusted sign-in input was invalid." };
+    }
+    if (message.field === "password" && message.value.length > 40) return { ok: false, error: "Password is longer than the AliExpress sign-in field." };
+    if (message.field === "username" && message.value.length > 320) return { ok: false, error: "AliExpress account name is too long." };
+    if (!message.value) return { ok: false, error: "Sign-in text is empty." };
+
+    if (ownedSession.owner === "manual") {
+      if (ownedSession.loginAutomationState !== "attempting") return { ok: false, error: "No saved sign-in is active for this manual probe." };
+    } else if (ownedSession.owner === "automation" && ownedSession.runId) {
+      const [run, automationSession] = await Promise.all([getRun(), getAutomationSession()]);
+      if (!run || run.id !== ownedSession.runId || isTerminalRunState(run.state) || isPausedRunState(run.state) ||
+        automationSession?.runId !== run.id || automationSession.mainTabId !== tabId) {
+        return { ok: false, error: "No saved sign-in is active for this automation tab." };
+      }
+    } else {
+      return { ok: false, error: "This tab cannot receive saved sign-in input." };
+    }
+
+    let value = message.value;
+    message.value = "";
+    try {
+      const inserted = await insertTrustedText(tabId, value);
+      return inserted ? { ok: true } : { ok: false, error: "Trusted sign-in input is unavailable." };
+    } finally {
+      value = "";
+    }
+  }
+
   if (message.type === "PHASE0_CONTENT_READY") {
     scheduleStatsRefresh(tabId, message.url);
     if (owned && ownedSession?.owner === "automation" && ownedSession.runId) {
@@ -3889,6 +4286,7 @@ async function handleMessage(message: Phase0Message, sender: chrome.runtime.Mess
   if (message.type === "PHASE0_REPORT") {
     if (!owned) return { ok: false, error: "Unowned tab" };
     await storeReport(message.report, tabId);
+    void scheduleManualProbeLogins(tabId).catch(() => undefined);
     return { ok: true, owned: true };
   }
   if (message.type === "AUTOMATION_ARM_NAVIGATION") {
